@@ -1,0 +1,31 @@
+//
+//  HomeView.swift
+//  Neura
+//
+//  Created by Fırat İlhan on 8.11.2026.
+//
+
+import SwiftUI
+
+struct HomeView: View {
+    var body: some View {
+        NavigationStack {
+            VStack {
+                NavigationLink {
+                    ChatView()
+                        .toolbar(.hidden, for: .tabBar)
+                } label: {
+                    Text("Chat with Apple Intelligence")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .padding()
+                        .background(.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .navigationTitle("Neura")
+        }
+    }
+}
+
