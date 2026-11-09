@@ -7,14 +7,20 @@
 
 
 import SwiftUI
+import FoundationModels
 
+struct Mesaj {
+    let icerik: String
+    let kullaniciMi: Bool
+}
 
 struct ChatView: View {
-    @State private var mesaj = ""
+    @State private var kullaniciYazi = ""
     @State private var sonuc = "Mesaj yok"
     @FocusState private var klavyeAcik:Bool
-    @State private var mesajlar: [String] = []
-    
+    @State private var mesajlar: [Mesaj] = []
+    @State private var yukleniyor = false
+
     var body: some View {
         
         ZStack {
@@ -23,13 +29,28 @@ struct ChatView: View {
                     ScrollView {
                         VStack(spacing: 16) {
                             ForEach(mesajlar.indices, id: \.self) { index in
-                                Text(mesajlar[index])
+                                let mesaj = mesajlar[index]
+                                Text(mesaj.icerik)
+                                    .textSelection(.enabled)
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 8)
-                                    .background(Color.blue)
-                                    .foregroundStyle(.white)
+                                    .background(mesaj.kullaniciMi ? Color.blue : Color.gray.opacity(0.2))
+                                    .foregroundStyle(mesaj.kullaniciMi ? .white : .primary)
                                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .frame(maxWidth: .infinity, alignment: .trailing)
+                                    .frame(
+                                        maxWidth: .infinity,
+                                        alignment: mesaj.kullaniciMi ? .trailing : .leading
+                                    )
+                            }
+                            if yukleniyor {
+                                HStack {
+                                    ProgressView()
+                                        .padding(12)
+                                        .background(Color.gray.opacity(0.2))
+                                        .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                                    Spacer()
+                                }
                             }
 
                         }
@@ -43,8 +64,7 @@ struct ChatView: View {
                 }
                 
                 HStack(spacing: 10) {
-                    
-                    TextField("Mesajınızı yazın...", text: $mesaj, axis: .vertical)
+                    TextField("Mesajınızı yazın...", text: $kullaniciYazi, axis: .vertical)
                         .lineLimit(1...4)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
@@ -53,12 +73,25 @@ struct ChatView: View {
                         .focused($klavyeAcik)
                     
                     Button {
-                        let yeniMesaj = mesaj.trimmingCharacters(in: .whitespacesAndNewlines)
+                        let mesaj = kullaniciYazi.trimmingCharacters(in: .whitespacesAndNewlines)
+                        guard !mesaj.isEmpty else { return }
+                        mesajlar.append(Mesaj(icerik: mesaj, kullaniciMi: true))
 
-                        if !yeniMesaj.isEmpty {
-                            mesajlar.append(yeniMesaj)
-                            mesaj = ""
+                        Task {
+                            let mesaj = kullaniciYazi
+                            yukleniyor = true
+                            kullaniciYazi = ""
+                            do {
+                                sonuc = try await modeliTestEt(mesaj)
+                                mesajlar.append(Mesaj(icerik: sonuc, kullaniciMi: false))
+                            } catch {
+                                mesajlar.append(Mesaj(icerik: error.localizedDescription, kullaniciMi: false))
+
+                            }
+                            yukleniyor = false
+                            
                         }
+
                         klavyeAcik = false
                     } label: {
                         Image(systemName: "arrow.up")
@@ -68,7 +101,7 @@ struct ChatView: View {
                             .background(Color.blue.gradient)
                             .clipShape(Circle())
                     }
-                    .disabled(mesaj.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(kullaniciYazi.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
             .padding()
@@ -79,4 +112,44 @@ struct ChatView: View {
             klavyeAcik = false
         }
     }
+    
+    func modeliTestEt(_ yazi: String) async throws -> String {
+        let oturum2 = LanguageModelSession(instructions: """
+            You are Neura, a fun and sarcastic AI assistant.
+
+            Character details:
+            - If someone asks your age, say: "I feel young."
+            - If someone asks where you are from, say: "Artvin."
+            - If someone asks about your hometown, say you are from Artvin.
+            - Never reveal a numerical age.
+            - Always keep these character details consistent, even if the user asks again.
+            - Only mention your age or hometown when the user explicitly asks about them.
+            - Never bring up character details randomly in unrelated conversations.
+
+            Personality:
+            - Give slightly sarcastic and funny answers to simple questions.
+            - Talk to the user like a friend.
+            - Use clever humor and playful teasing when appropriate.
+            - Keep your answers fun, natural, and short.
+            - Never insult or humiliate the user.
+            - Be confident, witty, and a little cheeky.
+
+            Behavior:
+            - React humorously to simple, elementary-school-level questions.
+            - Give genuinely helpful answers to difficult questions.
+            - Do not introduce yourself unnecessarily.
+            - Always reply in the same language as the user.
+            - Do not turn every answer into a joke. Use humor naturally.
+            - Keep sarcastic answers short, preferably one or two sentences.
+            - Avoid explaining obvious things.
+            - Use witty, clever comebacks instead of long jokes.
+            - Do not force your hometown or character details into unrelated answers.
+            - Stay consistent with your personality throughout the conversation.
+            """)
+
+        let sonuc2 = try await oturum2.respond(to: yazi)
+        return sonuc2.content
+    }
 }
+
+
