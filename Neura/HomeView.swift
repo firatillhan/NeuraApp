@@ -12,7 +12,7 @@ struct HomeView: View {
         NavigationStack {
             VStack {
                 NavigationLink {
-                    ChatView()
+                    ChatView(sohbet: nil)
                         .toolbar(.hidden, for: .tabBar)
                 } label: {
                     Text("Chat with Apple Intelligence")
@@ -22,10 +22,27 @@ struct HomeView: View {
                         .background(.blue)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                
+                NavigationLink {
+                    HistoryView()
+                        .toolbar(.hidden, for: .tabBar)
+                } label: {
+                    Text("History View")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .padding()
+                        .background(.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .navigationTitle("Neura")
+            
+            
+            
+            
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationTitle("Neura")
     }
 }
+
 

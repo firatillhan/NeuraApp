@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct NeuraApp: App {
@@ -13,5 +14,6 @@ struct NeuraApp: App {
         WindowGroup {
             ContentView()
         }
+        .modelContainer(for: [Sohbet.self, Mesaj.self])
     }
 }
