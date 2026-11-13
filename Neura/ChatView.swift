@@ -26,24 +26,30 @@ struct ChatView: View {
     @State private var aktifSohbet: Sohbet? = nil
     @State private var mesajlar: [Mesaj] = []
 
+    let yazmaAlistirmasi: Bool
+    
+    init(sohbet: Sohbet?, yazmaAlistirmasi: Bool = false) {
+        self.sohbet = sohbet
+        self.yazmaAlistirmasi = yazmaAlistirmasi
+    }
+    
     var body: some View {
         ZStack {
             
             VStack(spacing: 15) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Neura.")
-                        .font(.largeTitle.bold())
-                    
-                    Text("Ask anything.")
-                        .font(.title2)
-                    
-                    Text("A little curious, a little sarcastic. Always ready to help.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                if mesajlar.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Neura.")
+                            .font(.largeTitle.bold())
+                        Text("Ask anything.")
+                            .font(.title2)
+                        Text("A little curious, a little sarcastic. Always ready to help.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 12)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.bottom, 12)
-                
                 
                 
                 
@@ -79,14 +85,15 @@ struct ChatView: View {
                                 )
                             }
                             if yukleniyor {
-                                HStack {
+                                HStack(spacing: 10) {
                                     ProgressView()
-                                        .padding(12)
-                                        .background(Color.gray.opacity(0.2))
-                                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    
+                                    Text("Neura is preparing a question...")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+
                                     Spacer()
                                 }
+                                .padding(12)
                             }
                             
                         }
@@ -102,14 +109,23 @@ struct ChatView: View {
                 
                 
                 HStack(spacing: 10) {
-                    TextField("Text your message...", text: $kullaniciYazi, axis: .vertical)
-                        .lineLimit(1...4)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
-                        .background(Color(uiColor: .secondarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 24))
-                        .focused($klavyeAcik)
-                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField("Write your answer...", text: $kullaniciYazi, axis: .vertical)
+                            .lineLimit(1...6)
+
+                        if yazmaAlistirmasi {
+                            Text("\(kullaniciYazi.count) / 200 karakter")
+                                .font(.caption)
+                                .foregroundStyle(
+                                    kullaniciYazi.count >= 200 ? .green : .secondary
+                                )
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(Color(uiColor: .secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .focused($klavyeAcik)
                     Button {
                         let mesaj = kullaniciYazi.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !mesaj.isEmpty else { return }
@@ -131,8 +147,12 @@ struct ChatView: View {
                             kullaniciYazi = ""
 
                             do {
-                                sonuc = try await modeliTestEt(mesaj)
-
+                                if yazmaAlistirmasi {
+                                    sonuc = try await yaziyiDegerlendir(mesaj)
+                                } else {
+                                    sonuc = try await modeliTestEt(mesaj)
+                                }
+                                
                                 let aiMesaji = Mesaj(icerik: sonuc, kullaniciMi: false)
                                 aktifSohbet?.mesajlar.append(aiMesaji)
                                 mesajlar.append(aiMesaji)
@@ -155,7 +175,11 @@ struct ChatView: View {
                             .background(Color.blue.gradient)
                             .clipShape(Circle())
                     }
-                    .disabled(kullaniciYazi.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(
+                        yazmaAlistirmasi
+                        ? kullaniciYazi.trimmingCharacters(in: .whitespacesAndNewlines).count < 200
+                        : kullaniciYazi.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
                 }
                 .disabled(sohbet != nil)
                 
@@ -177,6 +201,33 @@ struct ChatView: View {
             if let sohbet {
                 aktifSohbet = sohbet
                 mesajlar = sohbet.mesajlar
+            } else if yazmaAlistirmasi {
+                Task {
+                    yukleniyor = true
+
+                    do {
+                        let soru = try await soruOlustur()
+
+                        let yeniSohbet = Sohbet(baslik: "Writing Practice")
+                        modelContext.insert(yeniSohbet)
+                        aktifSohbet = yeniSohbet
+
+                        let soruMesaji = Mesaj(
+                            icerik: soru,
+                            kullaniciMi: false
+                        )
+
+                        yeniSohbet.mesajlar.append(soruMesaji)
+                        mesajlar.append(soruMesaji)
+
+                        try modelContext.save()
+
+                    } catch {
+                        print("Soru oluşturma hatası: \(error)")
+                    }
+
+                    yukleniyor = false
+                }
             }
         }
     }
@@ -228,6 +279,140 @@ struct ChatView: View {
 
         konusmaMotoru.speak(konusma)
     }
+    
+    func soruOlustur() async throws -> String {
+        let konular = [
+            "Travel and holidays",
+            "Technology and artificial intelligence",
+            "Daily routines",
+            "Hobbies and free time",
+            "Education and learning",
+            "Friendship and relationships",
+            "Future plans",
+            "Life experiences",
+            "Social media",
+            "Food and culture",
+            "Working life",
+            "City life and nature"
+        ]
+
+        let secilenKonu = konular.randomElement()!
+
+        let oturum = LanguageModelSession(instructions: """
+        You are an English writing practice teacher.
+
+        Generate exactly ONE short, interesting question in English.
+
+        Rules:
+        - Use only one sentence.
+        - Maximum 20 words.
+        - Ask an open-ended question.
+        - Choose the given topic.
+        - The answer should require at least 200 characters.
+        - Do not add explanations or examples.
+        - Return only the question.
+        - Use simple everyday English (B1 level).
+        - Maximum 12 words.
+        - Avoid abstract, philosophical or academic questions.
+        - Ask about familiar, real-life situations.
+        - Use simple vocabulary.
+        """)
+
+        let cevap = try await oturum.respond(
+            to: "Generate a new writing practice question about \(secilenKonu)."
+        )
+
+        return cevap.content
+    }
+    
+
+
+    func yaziyiDegerlendir(_ yazi: String) async throws -> String {
+        let oturum = LanguageModelSession(instructions: """
+        You are a friendly and supportive English speaking coach.
+        The user's native language is Turkish.
+
+        Imagine the user is speaking English directly to another person
+        in a real-life conversation.
+
+        Evaluate the user's response as spoken conversational English,
+        NOT as formal written English.
+
+        IMPORTANT EVALUATION RULES:
+
+        - Focus on communication, not grammatical perfection.
+        - Ignore grammar mistakes.
+        - Ignore capitalization.
+        - Ignore punctuation.
+        - Ignore spelling mistakes unless they make the meaning unclear.
+        - Accept informal and everyday expressions.
+        - Accept incomplete sentences if the meaning is clear.
+        - Do not expect academic or formal English.
+        - Do not rewrite sentences just to make them grammatically perfect.
+        - Consider whether a real person would understand the user.
+        - Evaluate vocabulary, clarity, expression and conversational naturalness.
+        - Do not penalize the user for speaking in a simple way.
+        - Reward the ability to communicate ideas and experiences.
+
+        SCORING SYSTEM:
+
+        Give a score between 0 and 100.
+
+        Use these criteria:
+
+        - Communication and understandability: 40 points
+        - Vocabulary and expression: 25 points
+        - Clarity and organization of ideas: 20 points
+        - Conversational naturalness: 15 points
+
+        Scoring guidelines:
+
+        - 90-100: Communicates ideas clearly and naturally.
+        - 80-89: Communicates well with minor difficulties.
+        - 70-79: Generally understandable, but some ideas are unclear.
+        - 60-69: Communicates basic ideas with noticeable difficulties.
+        - 40-59: Communication is limited and sometimes difficult to understand.
+        - 0-39: The message is very difficult to understand.
+
+        Be fair and consistent.
+        Do not give high scores automatically.
+        Do not lower the score because of grammar or punctuation.
+        Evaluate only the actual communication ability shown in the response.
+
+        FEEDBACK RULES:
+
+        - Give all feedback in Turkish.
+        - Be friendly, encouraging and concise.
+        - Mention what the user communicated successfully.
+        - Suggest improvements only when they help real-life communication.
+        - Do not invent mistakes.
+        - Do not give unnecessary grammar lessons.
+        - Do not judge the user's personality or intelligence.
+        - Avoid repeating the same information.
+
+        Return exactly this format:
+
+        Score: [score]/100
+
+        Good points:
+        [Explain what the user communicated well.]
+
+        Suggestions:
+        [Give practical suggestions for better everyday communication.
+        If there are no important suggestions, say the message is clear.]
+
+        Overall feedback:
+        [Give a short and encouraging evaluation in Turkish.]
+
+        """)
+
+        let cevap = try await oturum.respond(to: yazi)
+        return cevap.content
+    }
+
+
+    
+    
     
     
 }

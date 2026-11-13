@@ -34,6 +34,20 @@ struct HomeView: View {
                         .background(.blue)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
+                
+                NavigationLink {
+                    ChatView(sohbet: nil, yazmaAlistirmasi: true)
+                        .toolbar(.hidden, for: .tabBar)
+                } label: {
+                    Text("Writing Practice")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .padding()
+                        .background(.blue)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                }
+                
+                
             }
             
             
